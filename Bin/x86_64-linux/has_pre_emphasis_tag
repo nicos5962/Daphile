@@ -1,0 +1,21 @@
+#! /usr/bin/python
+import sys
+import mutagen
+import re
+
+peKey=re.compile('(TXXX:)?PRE[-_]{0,1}EMPHASIS', re.IGNORECASE)
+peVal=re.compile('^(ON|YES|1|TRUE)$', re.IGNORECASE)
+
+if len (sys.argv) != 2 :
+    sys.exit (1)
+
+try:
+    info=mutagen.File(sys.argv[1], easy=True)
+except Exception as e:
+    sys.exit (1)
+
+for key in info.keys():
+    if ( peKey.match( key ) and peVal.match( info[key][0] ) ):
+        sys.exit (0)
+
+sys.exit (1)

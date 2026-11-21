@@ -1,0 +1,15 @@
+[% PROCESS settings/header.html %]
+[% WRAPPER setting title="PLUGIN_DAPHILE_OVERRIDE" desc="PLUGIN_DAPHILE_OVERRIDE_DESC" %]
+	<input type="checkbox" [% IF prefs.pref_overrideTranscoding %]checked [% END %] class="stdedit" name="pref_overrideTranscoding" id="overrideTranscoding" value="1"/>
+	<label for="overrideTranscoding" class="stdlabel">[% "PLUGIN_DAPHILE_OVERRIDE" | string %]</label>
+[% END %]
+
+[% WRAPPER setting title="PLUGIN_DAPHILE_INFO_LOGS" desc="" %]
+	<select id="log_type">
+		[% FOREACH log IN logs %]
+			<option value="[% log.url | html %]">[% log.label | html %]</option>
+		[% END %]
+	</select>
+	<button type="button" onclick="window.open('[% webroot %]' + document.getElementById('log_type').value, 'log');">[% "PLUGIN_DAPHILE_INFO_LOGS_VIEW" | string %]</button>
+[% END %]
+[% PROCESS settings/footer.html %]

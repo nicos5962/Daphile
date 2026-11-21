@@ -1,0 +1,42 @@
+@font-face {
+    font-family: 'Ubuntu';
+    font-style: normal;
+    font-weight: 400;
+    src:
+	local('Ubuntu'),
+/*	
+	url('../font/Ubuntu_400.woff') format('woff'),
+	url('../font/Ubuntu_400.ttf') format('truetype'),
+*/
+	url('/Daphile/html/ext/resources/font/Ubuntu_400.woff') format('woff'),
+	url('/Daphile/html/ext/resources/font/Ubuntu_400.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'Ubuntu';
+    font-style: normal;
+    font-weight: 700;
+    src:
+	local('Ubuntu Bold'),
+	local('Ubuntu-Bold'),
+/*	
+	url('../font/Ubuntu_700.woff') format('woff'),
+	url('../font/Ubuntu_700.ttf') format('truetype'),
+*/
+	url('/Daphile/html/ext/resources/font/Ubuntu_700.woff') format('woff'),
+	url('/Daphile/html/ext/resources/font/Ubuntu_700.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Ubuntu Mono';
+    font-style: normal;
+    font-weight: 400;
+    src:
+	local('Ubuntu Mono'),
+	local('UbuntuMono-Regular'),
+/*	
+	url('../font/Ubuntu_Mono_400.woff') format('woff'),
+	url('../font/Ubuntu_Mono_400.ttf') format('truetype'),
+*/	
+	url('/Daphile/html/ext/resources/font/Ubuntu_Mono_400.woff') format('woff'),
+	url('/Daphile/html/ext/resources/font/Ubuntu_Mono_400.ttf') format('truetype');
+}

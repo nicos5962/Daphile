@@ -1,0 +1,645 @@
+#! /bin/bash
+
+unset PIPELINE
+
+# helpers (jsonrpc, has_pre_emphasis_tag, ...) live next to this script
+PATH="$(dirname "$(readlink -f "$0")"):${PATH}"
+
+function clean_exit() {
+	[[ -f "${LOGTMP}" ]] && rm -f "${LOGTMP}"
+	[[ -f "${LOG}" ]] && rm -f "${LOG}"
+	exit
+}
+
+function pipeline()
+{
+	[[ -n "${PIPELINE}" ]] && PIPELINE+=" | "
+	PIPELINE+="$@"
+}
+
+function sox_effects() {
+	SOX_EFFECTS+=( $@ )
+	[[ -n "${AUDIO_PROC}" ]] && AUDIO_PROC+="->"
+	AUDIO_PROC+="[$@]"
+}
+
+function select_rate() {
+	local rate="$1"
+	local rates="$2"
+	local type="${3:-pcm}"
+	local orate=${rates%%:*}
+	local dist= min=
+
+	for r in ${rates//:/ }
+	do
+		[[ "$r" =~ ^[0-9]+$ && $r -gt 0 ]] || continue
+		[[ "$type" = "pcm" && $r -ge $DSD64 ]] && continue
+		[[ "$type" = "dsd" && $r -lt $DSD64 ]] && continue
+		if [[ $(( rate % r )) -eq 0 ]]
+		then
+			dist=$(( rate / r ))
+			if [[ -z "$min" || $dist -lt $min ]]
+			then
+				min=$dist
+				orate=$r
+			fi
+		elif [[ $(( r % rate )) -eq 0 ]]
+		then
+			dist=$(( r / rate ))
+			if [[ -z "$min" || $dist -le $min ]]
+			then
+				min=$dist
+				orate=$r
+			fi
+		fi
+	done
+
+	echo "${orate}"
+}
+
+function need_sox() {
+	local in="${SOX_INPUT[@]}"
+	local out="${SOX_OUTPUT[@]}"
+	local eff="${SOX_EFFECTS[0]}"
+
+	[[ -n "$eff" ]] && return 0
+	[[ "${in: -1}" = "-" ]] || return 0
+
+	local ifmt="${in#*-t }"
+	ifmt="${ifmt%% *}"
+	[[ "${ifmt}" =~ ^(aiff|wav)$ ]] && ifmt="${ifmt}-${SFMT}"
+	ifmt="${ifmt^^}"
+
+	local ofmt="${out#*-t }"
+	ofmt="${ofmt%% *}"
+	[[ "${ofmt}" =~ ^(aiff|wav)$ ]] && ofmt="${ofmt}-${OFMT}"
+	ofmt="${ofmt^^}"
+
+	[[ "${ifmt}" != "${ofmt}" ]] && return 0
+
+	return 1
+}
+
+function is_hdcd() {
+	local file="$1"
+	ffmpeg -hide_banner -nostats -t 10 -i "${file}" -vn -af hdcd -f s24le - 2>&1 >/dev/null < /dev/null | grep -qsm 1 "HDCD detected: yes"
+}
+
+function stream_info() {
+	local input="$1"
+
+	local info=$(/usr/bin/timeout 15 ffprobe -v quiet -print_format json -show_streams "${input}" | jq '[.streams[] | select(.codec_type=="audio")][0]')
+	CHS=$(echo "${info}" | jq -r .channels)
+	RATE=$(echo "${info}" | jq -r .sample_rate)
+
+	FMT="${CONV_RULE%%-*}"
+	[[ -z "$FMT" ]] && FMT="${input##*.}"
+	FMT="${FMT,,}"
+
+	if [[ "${FMT}" =~ ^(dsf|dff)$ ]]
+	then
+		BITS=$(echo "${info}" | jq -r .bits_per_sample)
+		RATE=$(( RATE * BITS ))
+		BITS=1
+	elif [[ "${FMT}" =~ ^(aif|aiff|wav)$ ]]
+	then
+		[[ "${FMT}" = "aif" ]] && FMT=aiff
+		BITS=$(echo "${info}" | jq -r .bits_per_sample)
+		SFMT=$(echo "${info}" | jq -r .codec_name | sed -e 's,^pcm_,,' -e 's/.*/\L&/')
+		[[ "${SFMT:0:1}" = "f" ]] && NATIVE=false # Floating point samples
+	elif [[ "${FMT}" =~ ^(wv|wvp|wvpx)$ ]]
+	then
+		FMT="wv"
+		if $REMOTE
+		then
+			info=$(curl -sL "${input}" | wvunpack -f -)
+		else
+			info=$(wvunpack -f "${input}")
+		fi
+		RATE=$(echo "$info" | cut -f 1 -d \;)
+		BITS=$(echo "$info" | cut -f 2 -d \;)
+		CHS=$(echo "$info" | cut -f 4 -d \;)
+	else
+		BITS=$(echo "${info}" | jq -r .bits_per_raw_sample)
+		[[ "$BITS" =~ ^[0-9]+$ ]] || BITS=$(echo "${info}" | jq -r .bits_per_sample)
+		local fmt=$(echo "${info}" | jq -r .codec_name)
+		if [[ "${fmt}" =~ ^pcm_ ]]
+		then
+			FMT="pcm"
+			SFMT=$(echo "${fmt}" | sed -e 's,^pcm_,,' -e 's/.*/\L&/')
+		elif [[ -n "${fmt}" ]]
+		then
+			FMT="${fmt,,}"
+			[[ "${CONV_RULE%%-*}" = "ogf" && "${FMT}" = "flac" ]] && FMT="ogg flac"
+		fi
+	fi
+
+	if [[ "${RATE}" -eq 44100 && "${BITS}" -eq 16 && "${CONV_RULE%%-*}" =~ ^(wav|aif|flc|alc|wvp|cdplay)$ ]]
+	then
+		local hdcd=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:hdcd \? | jq -r '.result._p2')
+		[[ "${hdcd}" = "1" ]] && is_hdcd "${input}" && HDCD=true
+	fi
+
+	if [[ "${input:0:1}" = "/" && -e "${input}" ]]
+	then
+		local deemph=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:deemph \? | jq -r '.result._p2')
+		[[ "${deemph}" = "1" ]] && has_pre_emphasis_tag "${input}" && DEEMPH=true
+	fi
+
+	[[ "$RATE" =~ ^[1-9][0-9]+$ ]] || RATE=44100
+	[[ "$BITS" =~ ^[0-9]+$ && $BITS -gt 0 ]] || BITS=16
+	[[ "$CHS" =~ ^[1-9][0-9]*$ ]] || CHS=2
+}
+
+function kHz() {
+	local khz=$(echo "$1" | awk '{printf("%.1f",$1/1000)}' | sed 's/\.0$//')
+	echo -n "${khz}kHz"
+}
+
+function log() {
+	$DOLOG || return 0
+	[[ -e "${LOG}" ]] || return 0
+	if [[ $# -gt 0 ]]
+	then
+		echo "$@" >> "${LOG}"
+	else
+		cat - >> "${LOG}"
+	fi
+	return 0
+}
+
+FFMPEG_OUTPUT+=( "-vn" )
+SERVER_SIDE_RESAMPLE=0
+OUTFORMAT="flac"
+DSD64=$(( 64 * 44100 ))
+DOP=false
+DOLOG=true
+FORCE_SOX=false
+HDCD=false
+SOX_DECODE=true
+DEEMPH=false
+OUTPUT="-"
+ARGS="$@"
+[[ "${0##*/}" = "Native+" ]] && NATIVE=true || NATIVE=false
+
+while getopts MZxo:p:m:s:d:b:e:r:F:f:q:B: OPT
+do
+	case "$OPT" in
+		x)
+			DOP=true
+			;;
+		F)
+			CONV_RULE="${OPTARG}"
+			;;
+		Z) # Play from RAM
+			SERVER_SIDE_RESAMPLE=1
+			PLAY_FROM_RAM=1
+			;;
+		M)
+			FFMPEG_OUTPUT+=( "-map_metadata" "-1" "-metadata" "ISFT=" "-flags" "bitexact" )
+			DOLOG=false
+			;;
+		m)
+			CLIENTID="${OPTARG//-/:}"
+			[[ "${CLIENTID}" = "undefined" ]] && DOLOG=false && SERVER_SIDE_RESAMPLE=1
+			;;
+		s)
+			SOX_START="${OPTARG}"
+			WV_START="--skip=$(date -u +%H:%M:%S.%N -d @${OPTARG})"
+			FFMPEG_INPUT+=( "-ss" "${OPTARG}" )
+			NATIVE=false
+			;;
+		d)
+			SOX_STOP="${OPTARG}"
+			WV_STOP="--until=+$(date -u +%H:%M:%S.%N -d @${OPTARG})"
+			FFMPEG_INPUT+=( "-t" "${OPTARG}" )
+			NATIVE=false
+			;;
+		r)
+			OUTRATE="${OPTARG}"
+			;;
+		b)
+			# Used only for raw PCM output
+			OUTBITS="${OPTARG}"
+			;;
+		f)
+			OUTFORMAT=${OPTARG}
+			;;
+		q)
+			QUALITY=${OPTARG}
+			;;
+		B)
+			BITRATE="${OPTARG}"
+			;;
+		o)
+			OUTPUT="${OPTARG}"
+			;;
+		p)
+			PMODEL="${OPTARG}"
+			;;
+	esac
+done
+shift $(expr ${OPTIND} - 1)
+FILE="$1"
+#
+#
+#
+# Log directory: DAPHILE_LOGDIR (set by the plugin), else the Daphile OS location,
+# else a volatile fallback.
+LOGDIR=
+if $DOLOG
+then
+	for d in "${DAPHILE_LOGDIR:+${DAPHILE_LOGDIR}/${CLIENTID}}" "$(realpath /run/spacd/p/$CLIENTID/log 2> /dev/null)"
+	do
+		[[ -n "$d" ]] && mkdir -p "$d" 2> /dev/null
+		[[ -n "$d" && -w "$d" ]] && LOGDIR="$d" && break
+	done
+	[[ -z "${LOGDIR}" ]] && LOGDIR="/dev/shm/remote_players/${CLIENTID}" && mkdir -p "${LOGDIR}"
+	LOGMAIN="${LOGDIR}/transcode.log"
+	touch "${LOGMAIN}"
+	LOG=$(mktemp --tmpdir=/dev/shm --suffix=".log" transcode-${CLIENTID}-XXXX)
+	LOGTMP=$(mktemp --tmpdir=/dev/shm --suffix=".tmp" transcode-${CLIENTID}-XXXX)
+else
+	LOG="/dev/null"
+	LOGTMP="/dev/null"
+fi
+log "[${0##*/}] $ARGS"
+log "  Clock: $(date +%H:%M:%S.%3N)"
+#
+# Decode input to pipeline
+#
+REMOTE=false
+if [[ "${CONV_RULE%%-*}" = "spt" ]]
+then
+	FMT="spotify"
+	SFMT="S16LE"
+	BITS=16
+	RATE=44100
+	CHS=2
+elif [[ "${FILE:0:1}" = "/" ]]
+then
+	#
+	# Local file
+	#
+	log "  Source: ${FILE/*music/Music Folder}"
+	stream_info "${FILE}"
+elif [[ "${FILE}" = "-" || "${FILE}" = "pipe:" ]]
+then
+	#
+	# Stdin stream
+	# - stream is buffered to temporary file in order to get stream infomation
+	#
+	FILE="-"
+	log "  Source: Proxied stream from Media Server"
+	buffer=$(mktemp --tmpdir=/media header-buffer-XXXXXX)
+	if [[ "${CONV_RULE%%-*}" = "cdplay" ]]
+	then
+		dd of=$buffer bs=2352 count=75 2> /dev/null
+	else
+		dd of=$buffer bs=4096 count=32 2> /dev/null
+	fi
+	stream_info "${buffer}"
+	if [[ "${FMT}" = "flac" && "$(head -c 4 "${buffer}")" != "fLaC" ]]
+	then
+		#
+		# Qobuz and probably also TIDAL seeking does not provide STREAMINFO metadata block.
+		# This work-around creates temporary one to be prepended for seeked streams.
+		#
+		FLAC_HEADER="/dev/shm/flac_header-${CLIENTID}"
+		(
+			printf "fLaC%b" "\x80\x00\x00\x22\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00"
+			info=$(( RATE << 12 | ( CHS - 1 ) << 9 | ( BITS - 1 ) << 4 | 0x0 ))
+			printf "%b" "$(printf "%08x" $info | sed 's/\(..\)/\\x\1/g')\x00\x00\x00\x00"
+			dd if=/dev/zero bs=16 count=1
+		) > "${FLAC_HEADER}"
+		buffer="${FLAC_HEADER} $buffer"
+	fi
+	pipeline cat ${buffer} -
+else
+	#
+	# Remote stream
+	#
+	REMOTE=true
+	log "  Source: ${FILE}"
+	if [[ "${FILE}" =~ ^http://.*:8[0-9]{3}/stream.wav$ || "${FILE}" =~ ^airplay://.*:[0-9]+/[0-9]+_stream.(wav|flc|mp3)$ ]]
+	then
+		# Shairport stream support
+		[[ "${FILE:0:8}" = "airplay:" ]] && FILE="http:${FILE:8}"
+		case "${CONV_RULE%%-*}" in
+			wav)
+				FMT="pcm"
+				SFMT="S16LE"
+				FFMPEG_INPUT+=( "-f" "s16le" "-ar" "44100" "-ac" "2" )
+				;;
+			flc)
+				FMT="flac"
+				;;
+			*)
+				fmt="${CONV_RULE%%-*}"
+		esac
+		BITS=16
+		RATE=44100
+		CHS=2
+	else
+		[[ "${FILE:0:4}" = "mms:" ]] && FILE="mmsh:${FILE:4}" # Needed for ffmpeg
+		[[ "${FILE:0:5}" = "upnp:" ]] && FILE="http:${FILE:5}"
+		stream_info "${FILE}"
+	fi
+fi
+
+[[ "${FILE}" = "-" ]] || FILE="'${FILE//\'/\'\"\'\"\'}'"
+
+DOP_INPUT=false
+if [[ "$BITS" -eq 1 ]]
+then
+	log "  Input format: ${FMT^^}, DSD$(( RATE / 44100 ))"
+elif [[ "${FILE}" =~ RAM\ play\ cache.*\[DSD[0-9]+-DoP\].wav ]]
+then
+	RATE=$(( RATE * 16 ))
+	log "  Input format: DoP WAV, DSD$(( RATE / 44100 ))"
+	DOP=true
+	DOP_INPUT=true
+else
+	ifmt="${FMT^^}"
+	[[ "${FMT}" =~ ^(aiff|wav|pcm)$ ]] && ifmt+=" (${SFMT^^})"
+	ifmt+=", $(kHz ${RATE}), ${BITS}bits"
+	$HDCD && ifmt+=", HDCD" && BITS=24
+	log "  Input format: ${ifmt}"
+fi
+
+if [[ $BITS -eq 1 ]]
+then
+	:
+elif [[ $BITS -le 16 ]]
+then
+	BITS=16
+elif [[ $BITS -gt 24 ]]
+then
+	BITS=32
+else
+	BITS=24
+fi
+
+[[ "${FMT}" =~ ^(flac|mp3|wav|aiff|opus|dsf|dff)$ ]] || SOX_DECODE=false
+[[ "${SFMT^^}" = "DTS" ]] && SOX_DECODE=false
+$HDCD && SOX_DECODE=false
+
+if [[ "${FMT}" = "spotify" ]]
+then
+	SOX_INPUT+=( "-t" "raw" "-b" "${BITS}" "-r" "${RATE}" "-c" "${CHS}" "-e" "signed" "--endian" "little" "-" )
+elif $SOX_DECODE
+then
+	if $REMOTE
+	then
+		pipeline curl -sL "${FILE}" '2> /dev/null'
+		SOX_INPUT=( "-t" "${FMT}" "-" )
+	else
+		SOX_INPUT=( "-t" "${FMT}" "${FILE}" )
+	fi
+	[[ -n "${SOX_START}" || -n "${SOX_STOP}" ]] && sox_effects "trim" ${SOX_START:-0} ${SOX_STOP}
+	$DEEMPH && sox_effects deemph && BITS=24
+elif [[ "${FMT}" = "wv" && $BITS -eq 1 ]]
+then
+	if [[ "${OUTFORMAT}" =~ ^(dsf|dff)$ ]]
+	then
+		WVOUT="${OUTFORMAT}"
+	else
+		WVOUT="dff"
+		DOP=true
+	fi
+	if $REMOTE
+	then
+		pipeline curl -sL "${FILE}" '2> /dev/null'
+		pipeline wvunpack -q - "--${WVOUT}" -o - '2> /dev/null'
+	else
+		pipeline wvunpack -q ${WV_START} ${WV_STOP} "${FILE}" "--${WVOUT}" -o - '2> /dev/null'
+	fi
+	SOX_INPUT=( "-t" "${WVOUT}" "-" )
+else
+	[[ "${FMT}" = "flac" ]] && FFMPEG_INPUT+=( "-use_buggy_lpc" "1" )
+	FFMPEG_INPUT+=( "-i" "${FILE}" )
+	$HDCD && FFMPEG_OUTPUT+=( "-af" "hdcd" )
+	FFMPEG_OUTPUT+=( "-f" "wav" "-acodec" "pcm_s${BITS}le" "-" )
+	SFMT="s${BITS}le"
+	pipeline ffmpeg -v 0 "${FFMPEG_INPUT[@]}" "${FFMPEG_OUTPUT[@]}"
+	SOX_INPUT=( "--ignore-length" "-t" "wav" "-" )
+fi
+#
+# Multi-channel to stereo conversion.
+#
+[[ "${CHS:-2}" -gt "2" ]] && sox_effects "remix" "1" "2"
+#
+# Determine output sample rate
+# - PCM and AIFF must be handled according to LMS request.
+#	AIFF exception for the patched Daphile squeezelite.
+#
+LMSRATE=true
+if [[ "$OUTFORMAT" != "pcm" && ( "$OUTFORMAT" != "aiff" || "$PMODEL" = daphile ) ]]
+then
+
+	player_rates=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:rates \? | jq -r '.result._p2')
+	[[ "${player_rates}" = "null" ]] && player_rates=""
+	[[ -z "$player_rates" && -z "$OUTRATE" ]] && player_rates="192000:176400:96000:88200:48000:44100"
+
+	if [[ "$OUTFORMAT" = "mp3" ]]
+	then
+		[[ -z "$player_rates" ]] && player_rates="48000:44100"
+		TMPRATE=$(select_rate "${RATE}" "${player_rates}" "pcm")
+		player_rates=$(select_rate "${TMPRATE}" "48000:44100" "pcm")
+		SERVER_SIDE_RESAMPLE=1
+	fi
+
+	[[ "${SERVER_SIDE_RESAMPLE}" != "1" ]] && \
+		SERVER_SIDE_RESAMPLE=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:resample \? | jq -r '.result._p2')
+
+	if [[ "${SERVER_SIDE_RESAMPLE}" = "1" && -n "${player_rates}" ]]
+	then
+		if [[ ":${player_rates}:" =~ :${RATE}: ]]
+		then
+			# Native rate supported
+			[[ -n "${OUTRATE}" && ${RATE} != ${OUTRATE} ]] && LMSRATE=false
+			OUTRATE="${RATE}"
+			[[ ! "$OUTFORMAT" =~ ^(dsf|dff)$ && $BITS -eq 1 ]] && DOP=true
+		else
+			[[ "$OUTFORMAT" =~ ^(dsf|dff)$ ]] && RATETYPE=dsd || RATETYPE=pcm
+			OUTRATE=$(select_rate "${RATE}" "${player_rates}" $RATETYPE)
+			LMSRATE=false
+		fi
+	elif [[ "$OUTFORMAT" =~ ^(dsf|dff)$ ]]
+	then
+		OUTRATE=$DSD64
+	elif $DOP
+	then
+		[[ $(( RATE / 16 )) -le $OUTRATE ]] && OUTRATE=$RATE
+	fi
+fi
+[[ "${OUTFORMAT}" =~ ^(dsf|dff)$ && "$OUTRATE" -le $DSD64 ]] && OUTRATE=$DSD64
+#
+# Resampling
+#
+if [[ -n "${OUTRATE}" && "${OUTRATE}" != "${RATE}" ]]
+then
+
+	resample=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:resample_setup \? | jq -r '.result._p2')
+	[[ "${resample}" = "null" ]] && resample=""
+	CUR_IFS=$IFS
+	IFS=: sox=( ${resample} )
+	IFS=${CUR_IFS}
+
+	if [[ "${OUTRATE}" -ge $DSD64 ]]
+	then
+		#
+		# Convert to DSD output
+		#
+		rate=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:pcm2dsd_rate \? | jq -r '.result._p2')
+		[[ "${rate}" =~ ^[0-9]+$ && ${rate} -gt 0 ]] && OUTRATE=${rate}
+		sdm_attenuate=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:sdm_attenuate \? | jq -r '.result._p2')
+		[[ "${sdm_attenuate}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || sdm_attenuate=7
+
+		if [[ "${RATE}" -ge $DSD64 ]]
+		then
+			dsd2dsd_cutoff=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:dsd2dsd_cutoff \? | jq -r '.result._p2')
+			[[ "${dsd2dsd_cutoff}" =~ ^[0-9]+$ ]] || dsd2dsd_cutoff=50
+			if [[ "${RATE}" -ge "${OUTRATE}" ]]
+			then
+				sox_effects "gain" "$(echo ${sdm_attenuate} | awk '{print -$1}')"
+				sox_effects "lowpass" "${dsd2dsd_cutoff}k"
+				sox_effects "downsample" "$(( RATE / OUTRATE ))"
+			else
+				sox_effects "upsample" "$(( OUTRATE / RATE ))"
+				sox_effects "lowpass" "${dsd2dsd_cutoff}k"
+				gtmp=$(echo "${sdm_attenuate}" "$(( OUTRATE / RATE ))" | awk '{printf("%f\n",20*log($2)/log(10)-$1)}')
+				sox_effects "gain" "${gtmp}"
+			fi
+		else
+			sox_effects "gain" "$(echo ${sdm_attenuate} | awk '{print -$1}')"
+			sox_effects "rate" "-${sox[0]:-v}n" "${OUTRATE}"
+		fi
+
+		nsfilt=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:pcm2dsd_nsfilt \? | jq -r '.result._p2')
+		[[ "$nsfilt" =~ ^(sdm|clans)-[45678]$ ]] || nsfilt="sdm-4"
+		sox_effects "sdm" "-f" "${nsfilt}"
+
+		[[ "${OUTFORMAT}" =~ ^(dsf|dff)$ ]] || DOP=true
+
+		SOX_INPUT_BUFFER=16384
+		SOX_OUTPUT_BUFFER=$(( 65536 * OUTRATE / DSD64 ))
+		$DOP && SOX_OUTPUT_BUFFER=$(( SOX_OUTPUT_BUFFER * 2 ))
+		[[ $(nproc) -ge 2 && "$PLAY_FROM_RAM" != "1" ]] &&
+			SOX_OPTS=( "--buffer" "${SOX_OUTPUT_BUFFER}" "--input-buffer" "${SOX_INPUT_BUFFER}" "--multi-thread" )
+	else
+		#
+		# Resampled PCM output
+		#
+		[[ "${sox[2]:-1}" != "0" ]] && sox_effects "gain" "$(echo ${sox[2]:-1} | awk '{print -$1}')"
+		sox_effects "rate" "-${sox[0]:-v}n" "${OUTRATE}"
+
+		[[ "${OUTFORMAT}" = "wav" ]] && maxbits=$(jsonrpc ${CLIENTID} playerpref plugin.daphile:maxbits \? | jq -r '.result._p2')
+		[[ ${maxbits:-0} -lt 24 ]] && maxbits=24
+		[[ $BITS -lt ${maxbits} ]] && BITS=${maxbits}
+
+		DOP=false
+	fi
+fi
+
+#
+# Output encoding
+#
+[[ "${OUTPUT}" != "-" ]] && OUTPUT="'${OUTPUT//\'/\'\"\'\"\'}'"
+
+if $DOP
+then
+	$DOP_INPUT || sox_effects "dop"
+	OUTRATE=$(( ${OUTRATE:-$RATE} / 16 ))
+	BITS=24
+fi
+
+if [[ -n "${OUTRATE}" ]]
+then
+	SOX_OUTPUT=( "-r" "${OUTRATE}" )
+else
+	OUTRATE="${RATE}"
+fi
+
+case "${OUTFORMAT}" in
+	mp3)
+		[[ -z "${QUALITY}" ]] && QUALITY=5
+		[[ -z "${BITRATE}" ]] && BITRATE=320
+		[[ "${QUALITY}" = "0" ]] && CMPR="${BITRATE}.01" || CMPR="${BITRATE}.${QUALITY}"
+		SOX_OUTPUT+=( "-C" "${CMPR}" "-t" "mp3" "${OUTPUT}" )
+		MP3INFO=", ${BITRATE}kbps, Quality=${QUALITY}"
+		;;
+	aiff)
+		if ! ${LMSRATE}
+		then
+			SOX_OUTPUT+=( "-t" "aiff" "-b" "${BITS}" "-e" "signed" "--endian" "big" "${OUTPUT}" )
+			OFMT="s${BITS}be"
+		elif [[ "${SFMT}" =~ le$ ]]
+		then
+			SOX_OUTPUT+=( "-t" "raw" "-b" "${BITS}" "-c" "2" "-e" "signed" "--endian" "little" "${OUTPUT}" )
+		else
+			SOX_OUTPUT+=( "-t" "raw" "-b" "${BITS}" "-c" "2" "-e" "signed" "--endian" "big" "${OUTPUT}" )
+		fi
+		NATIVE=false
+		;;
+	pcm)
+		[[ -z "${OUTBITS}" ]] && OUTBITS="${BITS}"
+		SOX_OUTPUT+=( "-t" "raw" "-b" "${OUTBITS}" "-c" "2" "-e" "signed" "--endian" "little" "${OUTPUT}" )
+		;;
+	wav)
+		#
+		# Bug fix for SoX WAV issue noticed with 24bit output => FFMPEG used for WAV
+		#
+		# SOX_OUTPUT+=( "-t" "wav" "-b" "${BITS}" "-e" "signed" "--endian" "little" "${OUTPUT}" )
+		SOX_OUTPUT+=( "-t" "sox" "${OUTPUT}" ); WAVBUGFIX=true
+		OFMT="s${BITS}le"
+		OUTFORMAT+=" (${OFMT})"
+		;;
+	dsf|dff)
+		SOX_OUTPUT+=( "-t" "${OUTFORMAT}" "${OUTPUT}" )
+		;;
+	flac|*)
+		SOX_OUTPUT+=( "-t" "flac" "-b" "$BITS" "-C" "0" "${OUTPUT}" )
+		;;
+esac
+if need_sox
+then
+	pipeline sox "${SOX_OPTS[@]}" "${SOX_INPUT[@]}" "${SOX_OUTPUT[@]}" "${SOX_EFFECTS[@]}"
+	[[ -n "$WAVBUGFIX" ]] && pipeline ffmpeg -v 0 "-f" "sox" "-i" "-" "-f" "wav" "-acodec" "pcm_s${BITS}le" "-"
+fi
+#
+# Logging and pipeline execution
+#
+[[ ${#SOX_EFFECTS[@]} -ne 0 ]] && NATIVE=false && log "  SoX effects: ${AUDIO_PROC}"
+if [[ "${OUTFORMAT}" =~ ^(dsf|dff)$ ]]
+then
+	log "  Output format: ${OUTFORMAT^^}, DSD$(( OUTRATE / 44100 ))"
+elif $DOP
+then
+	log "  Output format: DoP ${OUTFORMAT^^}, DSD$(( OUTRATE * 16 / 44100 ))"
+elif [[ "${OUTFORMAT}" = "mp3" ]]
+then
+	log "  Output format: MP3, $(kHz ${OUTRATE})${MP3INFO}"
+else
+	log "  Output format: ${OUTFORMAT^^}, $(kHz ${OUTRATE}), ${BITS}bits"
+fi
+
+$NATIVE && [[ "${FILE}" =~ ^\'/ ]] && PIPELINE="cat ${FILE}"
+
+exec 2>> "${LOGTMP}"
+trap clean_exit EXIT
+eval "${PIPELINE};RV=\$(echo \${PIPESTATUS[*]})"
+[[ -n "${buffer}" ]] && rm -f ${buffer}
+
+if $DOLOG
+then
+	sed '0,/.*Broken pipe/s/.*Broken pipe/Stream interrupted./' "${LOGTMP}" |
+		grep -v 'Broken pipe' |
+		grep -v 'sox WARN pad: Input audio too short' |
+		sed '0,/^ERROR: write error/s/^ERROR: write error/Stream interrupted./' |
+		grep -v -E '^sox .*(Length in output.*|Broken pipe)' | uniq |
+		sed 's/^/  /' | log
+	log "  Exit status: ${RV}"
+	cat "${LOG}" >> "${LOGMAIN}"
+	rm -f "${LOGTMP}" "${LOG}"
+fi

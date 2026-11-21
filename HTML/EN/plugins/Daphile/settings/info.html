@@ -1,0 +1,17 @@
+[% nosubmit = 1 %]
+[% PROCESS settings/header.html %]
+
+[% WRAPPER settingSection %]
+	[% WRAPPER settingGroup title="PLUGIN_DAPHILE_INFO_STATUS" desc="" %]
+		<table>
+		[% FOREACH item IN status %]
+			<tr>
+				<td style="padding-right:16px;white-space:nowrap;"><b>[% item.label | html %]:</b></td>
+				<td>[% item.value | html %]</td>
+			</tr>
+		[% END %]
+		</table>
+	[% END %]
+[% END %]
+
+[% PROCESS settings/footer.html %]

@@ -1,0 +1,15 @@
+#! /bin/bash
+
+function uri_unescape ()
+{
+    perl -MURI::Escape -e 'while (<>) {print uri_unescape($_);}'
+}
+
+cmd="$@"
+[[ -z "$cmd" ]] && exit
+
+server=$(sysvar.sh)
+[[ -z "${server}" ]] && server=127.0.0.1
+cliport=$(jsonrpc pref plugin.cli:cliport \? | jq -r '.result._p2')
+[[ -z "${cliport}" ]] && exit
+printf "%s\nexit\n" "$cmd" | nc $server $cliport | uri_unescape

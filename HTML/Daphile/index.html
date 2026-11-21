@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+  <head>
+
+    <meta name="viewport" content="width=device-width, user-scalable=no"/>
+    <meta name="format-detection" content="telephone=no">
+    <link rel="shortcut icon" type="image/x-icon" href="/Daphile/html/mypage.ico" />
+
+    <title>[% "SQUEEZEBOX_SERVER" | string %]</title>
+
+    <style>
+      html,body { background-color: transparent; }
+    </style>
+
+    <script type='text/javascript'>
+            (function () {
+		var iff_div = document.createElement('div'),
+		    iff_ref = document.getElementsByTagName('script')[0];
+		iff_div.innerHTML = '&shy;<style>iframe{visibility:hidden;}</style>';
+		iff_ref.parentNode.insertBefore(iff_div, iff_ref);
+		window.onload = function() {iff_div.parentNode.removeChild(iff_div);}
+            })();
+    </script>
+
+    <style>
+	  [% FILTER replace('url\(\.\./images/default', 'url(/html/ext/resources/images/default') %]
+      	[% INCLUDE "html/ext/resources/css/ext-main.css" %]
+	  [% END %]
+    </style>
+    [% IF hasMediaSupport %]<link rel="stylesheet" type="text/css" href="[% webroot %]html/lightbox/lightbox.css?r=[% revision %]" />[% END %]
+    <link rel="stylesheet" type="text/css" href="[% webroot %]slimserver.css?r=[% revision %]" />
+	<link rel="stylesheet" type="text/css" id="theme" href="[% webroot %]theme-default.css?r=[% revision %]" />
+    <link rel="apple-touch-icon" href="[% webroot %]html/images/apple-touch-icon.png"/>
+
+  </head>
+
+  <body class="main">
+
+    <div id="wallpaper"></div>
+
+    <script type="text/javascript">[% PROCESS html/vars.js %]</script>
+    <script type="text/javascript" src="[% webroot %]html/js-main.html?r=[% revision %]"></script>
+    <script type="text/javascript">[% PROCESS html/SqueezeJS/Strings.js %]</script>
+    <script type="text/javascript" src="[% webroot %]html/spin.min.js?r=[% revision %]"></script>
+    <script type="text/javascript" src="[% webroot %]daphile.js?r=[% revision %]"></script>
+
+    <script type="text/javascript">
+	    if(touchOnlyDevice){document.body.classList.add("touch");}
+	    if (window.top == window.self) {
+		document.body.className += ' bgcolor';
+	    }
+	    DaphileCssTheme('init');
+	    WallPaper('init');
+      [% IF moreThanThis != "" %]SqueezeJS.setCookie( 'Squeezebox-allLinks', "[% moreThanThis %]" )[% END %]
+      [% PROCESS jsString id='WEB_NO_COOKIES_WARNING' jsId='' %]
+
+			Ext.onReady(function() {
+				Main.init();
+				ThemeSelect('init');
+
+				// Firefox wouldn't load the frame on first attempt. Have it load an empty page first, before the home.html
+				if (Ext.isGecko)
+					frames.browser.location.href = "about:blank";
+
+				var navigationUrl = "[% webroot %][% IF search; "search"; ELSE; "home"; END %].html?player=[% playerid %]&uid=[% USE date; date.now %]&query=[% search | uri %]";
+
+				// we're parsing our URL to see whether the user wants to open it with a given URL in the left hand pane
+				var extendedUrl = document.URL.split('index.html/');
+				if (extendedUrl.length == 2) {
+					extendedUrl = extendedUrl[1].split('?');
+					if (extendedUrl.length >= 1) {
+						var doc = extendedUrl[0];
+						var params = Ext.urlDecode(extendedUrl[1]);
+
+						// some parameters we don't want to carry along
+						delete params.player;
+						delete params.sess;
+
+						navigationUrl = (doc.match(/^http/) ? '' : '[% webroot %]') + doc + '?' + Ext.urlEncode(params);
+					}
+				}
+
+				if (frames.browser.location)
+					frames.browser.location.href = navigationUrl;
+
+				if (Ext.ux.Lightbox) {
+					Ext.ux.Lightbox.labelOf = '[% "OF" | string %]';
+					Ext.ux.Lightbox.labelImage = '[% "PICTURE" | string %]';
+				}
+			}, Main, true);
+
+      function mySpin(id) {
+          var target = document.getElementById(id);
+          var opts = {
+              lines: 12, // The number of lines to draw
+              length: 2, // The length of each line
+              width: 2, // The line thickness
+              radius: 5, // The radius of the inner circle
+              corners: 0.5, // Corner roundness (0..1)
+              rotate: 0, // The rotation offset
+              direction: 1, // 1: clockwise, -1: counterclockwise
+              color: '#d75813', // #rgb or #rrggbb or array of colors
+              speed: 0.9, // Rounds per second
+              trail: 55, // Afterglow percentage
+              shadow: false, // Whether to render a shadow
+              hwaccel: false, // Whether to use hardware acceleration
+              className: 'spinner', // The CSS class to assign to the spinner
+              zIndex: 0, // The z-index (defaults to 2000000000)
+              top: '9px', // Top position relative to parent in px
+              left: '9px' // Left position relative to parent in px
+          };
+          var spinner = new Spinner(opts).spin(target);
+      }
+
+    </script>
+
+    <div id="mainresize" style="position:relative;">
+
+      <iframe name="browser" id="leftcontent" frameborder="0" scrolling="no" allowtransparency="true" seamless src="home.html"></iframe>
+      <div class="inner_content" id="rightcontent" style="position:relative;">
+	    <div class="header"></div>
+
+	    <div id="playerControlPanel">
+	      [% PROCESS status_header.html embedded=1 %]
+	    </div>
+
+	    <div id="playlistPanel">
+	      <div id="playList">
+	        <div class="noPlayerPanel" style="display:none">
+	          [% PROCESS status_noclients.html ajaxUpdate=1 %]
+	        </div>
+	      </div>
+	      <div id="playlistTab" class="infoTab"></div>
+	    </div>
+      </div>
+
+    </div>
+
+    <div id="footer" style="position:absolute;bottom:0;width:100%;margin:0px;">
+      <div id="footer_content" style="position:relative">
+	    <span id="helpInfoSection">
+	      <span id="footerInfo">
+	        <span id="scanWarning" style="display:none;">
+	          <a href="[% webroot %]progress.html?type=importer" target="browser"><img src="[% webroot %]html/images/Info.png"/></a>
+	          <a href="[% webroot %]progress.html?type=importer" target="browser">
+		        [% "RESCANNING_SHORT" | string %]
+		        <span id="progressInfo" class="link" style="display:none;">
+		          <span id="progressName"></span>
+		          <span class="progress">&nbsp;(</span><span id="progressDone"></span>
+		          <span class="progress"> [% "OF" | string %] </span>
+		          <span id="progressTotal"></span><span class="progress">)&nbsp;</span>
+		        </span>
+	          </a>
+	        </span>
+	        [% IF newPlugins %]
+	        <span id="newPlugins">
+	          <img src="[% webroot %]html/images/Info.png"/> <a href="[% webroot %]settings/index.html?activePage=SETUP_PLUGINS" target="sc_settings">[% newPlugins %]</a>
+	        </span>
+	        [% END %]
+	        <span id="footerInfoText"></span>
+	      </span>
+	    </span>
+	    <span id="settingsLink">
+	      [% IF NOT (nosetup || noserver) %]
+	        <a id="settingsHRef" href="[% webroot %]settings/index.html?player=[% player %]" target="sc_settings">[% "SETTINGS" | string %]</a>
+	      [% END %]
+	    </span>
+        <span id="playerBox">
+	      <span id="themeExtras">
+	        <select id="theme_select" onchange="ThemeSelect(this.value);">
+	          <option value="default">Dark</option>
+	          <option value="light">Light</option>
+	          <option value="system">Device</option>
+	        </select>
+	        <button id="wallpaper_toggle" type="button" onclick="WallPaper('toggle');">Wallpaper</button>
+	      </span>
+	      <span id="playerExtras">
+            <button id=undock_controller onclick="window.open(webroot + 'status_header.html?player=' + SqueezeJS.Controller.getPlayer(), 'playerControl', 'width=400,height=156,status=no,menubar=no,location=no,resizable=yes');" title='[% "UNDOCK_PLAYER_PANEL" | string %]'></button>
+          </span>
+	      <span id="playerChooser"></span>
+        </span>
+      </div>
+    </div>
+  </body>
+</html>

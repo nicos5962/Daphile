@@ -1,0 +1,133 @@
+# String file for Daphile plugin
+
+PLUGIN_DAPHILE
+	EN	Daphile
+
+PLUGIN_DAPHILE_DESC
+	EN	The plugin for Daphile extras.
+
+DSD
+	EN	DSD
+
+PLUGIN_DAPHILE_USEDOP
+	EN	Enable DSD-over-PCM
+
+PLUGIN_DAPHILE_USEDOP_DESC
+	EN	If the DAC of this player supports DSD-over-PCM standard you should enable this in order to get native DSD playback instead of conversion to PCM. You must also ensure that Volume Control setting for this player is "Output level is fixed at 100%".
+
+PLUGIN_DAPHILE_PCMDSF
+	EN	Enable PCM to DSD conversion
+
+PLUGIN_DAPHILE_PCMDSF_DESC
+	EN	All possible PCM streams will be converted to DSD (dsf).
+
+HLS
+	EN	HTTP Live Streaming (HLS)
+
+PLUGIN_DAPHILE_OVERRIDE
+	EN	Use Daphile transcoding rules
+
+PLUGIN_DAPHILE_OVERRIDE_DESC
+	EN	Replace the stock convert.conf rules with the Daphile Transcode/Decode helpers (requires sox, ffmpeg, ffprobe and jq). Applied immediately; disabling restores the stock rules.
+
+SKIN_DAPHILE
+	EN	Daphile
+
+PLUGIN_DAPHILE_INFO
+	EN	Daphile Info
+
+PLUGIN_DAPHILE_INFO_STATUS
+	EN	System status
+
+PLUGIN_DAPHILE_INFO_LOGS
+	EN	Log files
+
+PLUGIN_DAPHILE_INFO_LOGS_VIEW
+	EN	View
+
+PLUGIN_DAPHILE_AUDIOPROC
+	EN	Audio processing
+
+PLUGIN_DAPHILE_RESAMPLE
+	EN	Resample on the Media Server
+
+PLUGIN_DAPHILE_RESAMPLE_DESC
+	EN	Resample PCM to the rates supported by the player. When off, the stream is only resampled if its native rate is not supported.
+
+PLUGIN_DAPHILE_MAXRATE
+	EN	Max sample rate
+
+PLUGIN_DAPHILE_MAXRATE_DESC
+	EN	Highest sample rate the player's DAC accepts. Lower standard rates are allowed as well.
+
+PLUGIN_DAPHILE_HDCD
+	EN	HDCD
+
+PLUGIN_DAPHILE_HDCD_ENABLE
+	EN	Enable decoder
+
+PLUGIN_DAPHILE_DEEMPH
+	EN	Pre-emphasis
+
+PLUGIN_DAPHILE_DEEMPH_DESC
+	EN	Only if the PRE_EMPHASIS or PRE-EMPHASIS tag has the value "1", "on", "yes" or "true".
+
+PLUGIN_DAPHILE_DEEMPH_ENABLE
+	EN	Apply de-emphasis filter based on metadata tag
+
+PLUGIN_DAPHILE_RSFILTER
+	EN	Resampling filter
+
+PLUGIN_DAPHILE_RSQUAL
+	EN	Quality
+
+PLUGIN_DAPHILE_RSQUAL_VERYHIGH
+	EN	Very high
+
+PLUGIN_DAPHILE_RSQUAL_HIGH
+	EN	High
+
+PLUGIN_DAPHILE_RSPHASE
+	EN	Phase response
+
+PLUGIN_DAPHILE_RSPHASE_LINEAR
+	EN	Linear phase
+
+PLUGIN_DAPHILE_RSPHASE_INTERMEDIATE
+	EN	Intermediate phase
+
+PLUGIN_DAPHILE_RSPHASE_MINIMUM
+	EN	Minimum phase
+
+PLUGIN_DAPHILE_RSSTEEP
+	EN	Bandwidth
+
+PLUGIN_DAPHILE_RSSTEEP_DESC
+	EN	Changes resampling bandwidth from the default 95% (based on the 3dB point), to 99%.
+
+PLUGIN_DAPHILE_RSSTEEP_ENABLE
+	EN	Steep filter
+
+PLUGIN_DAPHILE_RSATT
+	EN	Attenuation
+
+PLUGIN_DAPHILE_RSATT_DESC
+	EN	Use attenuation to prevent clipping!
+
+PLUGIN_DAPHILE_PCMDSF_SECTION
+	EN	Conversion to DSD
+
+PLUGIN_DAPHILE_DSDRATE
+	EN	Output rate
+
+PLUGIN_DAPHILE_NSFILT
+	EN	Noise-shaping
+
+PLUGIN_DAPHILE_DSD2DSD
+	EN	DSD-to-DSD cutoff
+
+PLUGIN_DAPHILE_SDMATT
+	EN	Attenuation
+
+PLUGIN_DAPHILE_SDMATT_DESC
+	EN	Use attenuation to prevent SDM instability!

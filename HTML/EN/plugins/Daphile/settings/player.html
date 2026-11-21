@@ -1,0 +1,108 @@
+[% PROCESS settings/header.html %]
+[% WRAPPER setting title="PLUGIN_DAPHILE" desc="" %] <div class="prefDesc">[% "PLUGIN_DAPHILE_DESC" | string %]</div>[% END %]
+   [% WRAPPER settingSection %]
+      [% IF daphile %]
+         [% WRAPPER settingGroup title="Daphile Player" %]
+            [% IF address == '' %]
+                <button type="button" onclick="window.open('http://'+location.hostname+'/cgi-bin/Settings?SECTION=audio_devices','_top')">Audio Device Settings</button>
+            [% ELSE %]
+                <button type="button" onclick="window.open('[% address %]/cgi-bin/Settings?SECTION=audio_devices','_blank')">Audio Device Settings</button>
+		    [% END %]
+         [% END %]
+      [% ELSE %]
+
+         <h3>[% "PLUGIN_DAPHILE_AUDIOPROC" | string %]</h3>
+
+         [% WRAPPER settingGroup title="PLUGIN_DAPHILE_RESAMPLE" desc="PLUGIN_DAPHILE_RESAMPLE_DESC" %]
+            <input type="checkbox" [% IF prefs.resample %]checked [% END %] class="stdedit" name="pref_resample" id="resample" value="1"/>
+            <label for="resample" class="stdlabel">[% "PLUGIN_DAPHILE_RESAMPLE" | string %]</label>
+         [% END %]
+
+         [% WRAPPER settingGroup title="PLUGIN_DAPHILE_MAXRATE" desc="PLUGIN_DAPHILE_MAXRATE_DESC" %]
+            <select class="stdedit" name="pref_maxrate" id="maxrate">
+               [% FOREACH rate IN rates %]
+                  <option [% IF prefs.maxrate == rate %]selected [% END %]value="[% rate %]">[% rate / 1000 %] kHz</option>
+               [% END %]
+            </select>
+         [% END %]
+
+         [% WRAPPER settingGroup title="PLUGIN_DAPHILE_USEDOP" desc="PLUGIN_DAPHILE_USEDOP_DESC" %]
+            <input type="checkbox" [% IF prefs.usedop %]checked [% END %] class="stdedit" name="pref_usedop" id="usedop" value="1"/>
+            <label for="usedop" class="stdlabel">[% "PLUGIN_DAPHILE_USEDOP" | string %]</label>
+         [% END %]
+
+         [% WRAPPER settingGroup title="PLUGIN_DAPHILE_HDCD" desc="" %]
+            <input type="checkbox" [% IF prefs.hdcd %]checked [% END %] class="stdedit" name="pref_hdcd" id="hdcd" value="1"/>
+            <label for="hdcd" class="stdlabel">[% "PLUGIN_DAPHILE_HDCD_ENABLE" | string %]</label>
+         [% END %]
+
+         [% WRAPPER settingGroup title="PLUGIN_DAPHILE_DEEMPH" desc="PLUGIN_DAPHILE_DEEMPH_DESC" %]
+            <input type="checkbox" [% IF prefs.deemph %]checked [% END %] class="stdedit" name="pref_deemph" id="deemph" value="1"/>
+            <label for="deemph" class="stdlabel">[% "PLUGIN_DAPHILE_DEEMPH_ENABLE" | string %]</label>
+         [% END %]
+
+         <h3>[% "PLUGIN_DAPHILE_RSFILTER" | string %]</h3>
+
+         [% WRAPPER settingGroup title="PLUGIN_DAPHILE_RSQUAL" desc="" %]
+            <select class="stdedit" name="pref_rsqual" id="rsqual">
+               <option [% IF prefs.rsqual == 'v' %]selected [% END %]value="v">[% "PLUGIN_DAPHILE_RSQUAL_VERYHIGH" | string %]</option>
+               <option [% IF prefs.rsqual == 'h' %]selected [% END %]value="h">[% "PLUGIN_DAPHILE_RSQUAL_HIGH" | string %]</option>
+            </select>
+         [% END %]
+
+         [% WRAPPER settingGroup title="PLUGIN_DAPHILE_RSPHASE" desc="" %]
+            <select class="stdedit" name="pref_rsphase" id="rsphase">
+               <option [% IF prefs.rsphase == 'L' %]selected [% END %]value="L">[% "PLUGIN_DAPHILE_RSPHASE_LINEAR" | string %]</option>
+               <option [% IF prefs.rsphase == 'I' %]selected [% END %]value="I">[% "PLUGIN_DAPHILE_RSPHASE_INTERMEDIATE" | string %]</option>
+               <option [% IF prefs.rsphase == 'M' %]selected [% END %]value="M">[% "PLUGIN_DAPHILE_RSPHASE_MINIMUM" | string %]</option>
+            </select>
+         [% END %]
+
+         [% WRAPPER settingGroup title="PLUGIN_DAPHILE_RSSTEEP" desc="PLUGIN_DAPHILE_RSSTEEP_DESC" %]
+            <input type="checkbox" [% IF prefs.rssteep %]checked [% END %] class="stdedit" name="pref_rssteep" id="rssteep" value="1"/>
+            <label for="rssteep" class="stdlabel">[% "PLUGIN_DAPHILE_RSSTEEP_ENABLE" | string %]</label>
+         [% END %]
+
+         [% WRAPPER settingGroup title="PLUGIN_DAPHILE_RSATT" desc="PLUGIN_DAPHILE_RSATT_DESC" %]
+            <input type="range" class="stdedit" name="pref_rsatt" id="rsatt" min="0" max="12" step="0.1" value="[% prefs.rsatt %]" oninput="document.getElementById('rsatt_db').innerHTML = -this.value;"/>
+            <span id="rsatt_db">-[% prefs.rsatt %]</span> dB
+         [% END %]
+
+         [% IF dsf %]
+            <h3>[% "PLUGIN_DAPHILE_PCMDSF_SECTION" | string %]</h3>
+
+            [% WRAPPER settingGroup title="PLUGIN_DAPHILE_PCMDSF" desc="PLUGIN_DAPHILE_PCMDSF_DESC" %]
+               <input type="checkbox" [% IF prefs.pcmdsf %]checked [% END %] class="stdedit" name="pref_pcmdsf" id="pcmdsf" value="1"/>
+               <label for="pcmdsf" class="stdlabel">[% "PLUGIN_DAPHILE_PCMDSF" | string %]</label>
+            [% END %]
+
+            [% WRAPPER settingGroup title="PLUGIN_DAPHILE_DSDRATE" desc="" %]
+               <select class="stdedit" name="pref_pcm2dsd_rate" id="pcm2dsd_rate">
+                  <option [% IF prefs.pcm2dsd_rate == 2822400 %]selected [% END %]value="2822400">DSD64</option>
+                  <option [% IF prefs.pcm2dsd_rate == 5644800 %]selected [% END %]value="5644800">DSD128</option>
+                  <option [% IF prefs.pcm2dsd_rate == 11289600 %]selected [% END %]value="11289600">DSD256</option>
+                  <option [% IF prefs.pcm2dsd_rate == 22579200 %]selected [% END %]value="22579200">DSD512</option>
+               </select>
+            [% END %]
+
+            [% WRAPPER settingGroup title="PLUGIN_DAPHILE_NSFILT" desc="" %]
+               <select class="stdedit" name="pref_pcm2dsd_nsfilt" id="pcm2dsd_nsfilt">
+                  [% FOREACH f IN ['sdm-4','sdm-5','sdm-6','sdm-7','sdm-8','clans-4','clans-5','clans-6','clans-7','clans-8'] %]
+                     <option [% IF prefs.pcm2dsd_nsfilt == f %]selected [% END %]value="[% f %]">[% f %]</option>
+                  [% END %]
+               </select>
+            [% END %]
+
+            [% WRAPPER settingGroup title="PLUGIN_DAPHILE_DSD2DSD" desc="" %]
+               <input type="range" class="stdedit" name="pref_dsd2dsd_cutoff" id="dsd2dsd_cutoff" min="20" max="200" step="1" value="[% prefs.dsd2dsd_cutoff %]" oninput="document.getElementById('dsd2dsd_val').innerHTML = this.value;"/>
+               <span id="dsd2dsd_val">[% prefs.dsd2dsd_cutoff %]</span> kHz
+            [% END %]
+
+            [% WRAPPER settingGroup title="PLUGIN_DAPHILE_SDMATT" desc="PLUGIN_DAPHILE_SDMATT_DESC" %]
+               <input type="range" class="stdedit" name="pref_sdm_attenuate" id="sdm_attenuate" min="6" max="12" step="0.1" value="[% prefs.sdm_attenuate %]" oninput="document.getElementById('sdmatt_val').innerHTML = -this.value;"/>
+               <span id="sdmatt_val">-[% prefs.sdm_attenuate %]</span> dB
+            [% END %]
+         [% END %]
+      [% END %]
+   [% END %]
+[% PROCESS settings/footer.html %]

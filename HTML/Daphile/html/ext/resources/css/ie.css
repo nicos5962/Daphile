@@ -1,0 +1,11 @@
+option {
+    background:#303030;
+}
+
+input[type='checkbox'],input[type='radio'] {
+    height:13px;
+    width:13px;
+    border:none;
+    padding:0;
+    margin:0 2px -2px; 
+}

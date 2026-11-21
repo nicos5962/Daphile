@@ -1,0 +1,46 @@
+<div>
+
+	[% noPlaylistCover = "Squeezebox-noPlaylistCover"; noPlaylistCover = cookies.$noPlaylistCover.value %]
+
+	[% IF current_playlist %]
+	<div id="current_playlist_name">
+	  [% "PLAYLIST_SHORT" | string %][% stringCOLON %] [% current_playlist_name %] [% IF current_playlist_modified %]([% "MODIFIED" | string %])[% END %]
+	</div>
+	[% END %]
+
+	[% IF hasPagebar %]
+		<div class="pagerbox">
+			<div class="pagerbox_top"><div></div></div>
+			<div class="pagerbox_content">
+				[% PROCESS pagebar useJS="Main.playlist.load" %]
+			</div>
+			<div class="pagerbox_bottom"><div></div></div>
+		</div>
+	[% END %]
+
+	<div id="playList">
+		[% IF playercount < 1 %]
+			<div class="noPlayerPanel">
+			[% PROCESS status_noclients.html ajaxUpdate=1 %]
+			</div>
+		[% ELSE %]
+			[% IF playlist_items %]
+				[% FOREACH item = playlist_items %]
+					[% PROCESS status_list.html %]
+				[% END %]<div id="offset" style="display:none">[% start %]</div>
+			[% ELSE %]<p>[% "EMPTY" | string %]<a name="currentsong"></a></p>[% END %]
+		[% END %]
+	</div>
+
+	[% IF playercount > 0 %]
+	<div id="playlistTab" class="infoTab">
+		<div id="playlistCommands">
+				<span id="btnPlaylistToggleArtwork"></span>
+				<span id="total_playtime">[% IF pageinfo.totalDuration; "TOTAL_TIME" | string; "&nbsp;" _ pageinfo.totalDuration; END %]</span>
+ 				<span id="btnPlaylistSave" [% UNLESS cansave %]style="display:none"[% END %]></span>
+				<span id="btnPlaylistClear"></span>
+		</div>
+	</div>
+	[% END %]
+
+</div>

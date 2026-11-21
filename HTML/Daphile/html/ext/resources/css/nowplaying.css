@@ -1,0 +1,215 @@
+@import url(/css/font.css);
+
+:root {
+	--spacing:3vmin;
+	--progress-height:0.6vmin;
+	--title-height:6vmin;
+	--artist-height:4.5vmin;
+	--album-height:4.5vmin;
+	--line-spacing:1.40;
+	--bottom-margin:max(calc(0.5 * var(--progress-height)),env(safe-area-inset-bottom));
+}
+
+div {
+	text-align:center;
+	color:white;
+	font-family:Ubuntu,sans-serif;
+	vertical-align:middle;
+	text-overflow:ellipsis;
+	white-space:nowrap;
+	width:100%;
+	overflow:hidden;
+}
+
+body {
+	background-color:black;
+	color:white;
+	margin:0;
+	font-size:0;
+	cursor:none;
+	position:fixed;
+	height:100%;
+	width:100%;
+	top:0;
+	bottom:0;
+	left:0;
+	right:0;
+	overflow:hidden;
+}
+
+#content {
+	position:relative;
+	height:100%;
+	overflow:hidden;
+}
+
+#wallpaper {
+	--angle: -3deg;
+	--abssin: max( sin( var(--angle) ), -1 * sin( var(--angle) ) );
+	--abscos: max( cos( var(--angle) ), -1 * cos( var(--angle) ) );
+	--width: calc( 100vw * var(--abscos) + 100vh * var(--abssin) );
+	--height: calc( 100vh * var(--abscos) + 100vw * var(--abssin) );
+	position:fixed;
+	z-index:-1;
+	top: calc( ( 100vh - var(--height) ) / 2 );
+	left: calc( ( 100vw - var(--width) ) / 2 );
+	height: var(--height);
+	width: var(--width);
+	opacity:0.08;
+	background-image:url(/images/bgtile.png);
+	background-attachment:local;
+	background-size:108px 72px;
+	background-position:center;
+	background-repeat:repeat;
+	transform:rotate(var(--angle));
+}
+
+.vspace {
+	height:calc(var(--spacing));
+}
+
+#frame {
+	position:relative;
+	height:calc( 100% - ( 3 * var(--spacing) + var(--title-height) + var(--artist-height) + var(--album-height) + var(--progress-height) + var(--bottom-margin) ) );
+	font-size:0;
+	overflow:visible;
+}
+
+@media screen and (orientation:portrait) {
+	#frame {
+		max-height:calc( 100vw - 2 * var(--spacing) + ( 100% - 100vw - ( var(--title-height) + var(--artist-height) + var(--album-height) + var(--spacing) + var(--progress-height) + var(--bottom-margin) ) ) / 2 );
+	}
+}
+
+.cover {
+	position:absolute;
+	margin:auto;
+	margin-bottom:0;
+	top:0;
+	left:0;
+	right:0;
+	bottom:0;
+	opacity:0;
+	transition:opacity 0.5s linear;
+	height:100%;
+	width:auto;
+	object-fit:contain;
+	max-height:calc(100vw - 2 * var(--spacing));
+	vertical-align:middle;
+	-webkit-box-reflect:below 0px -webkit-gradient(linear,left top,left bottom,from(transparent),color-stop(75%,transparent),to(rgba(250,250,250,0.2)));
+	border-radius:var(--spacing);
+	box-shadow: 0 0 var(--spacing) 0 black;
+}
+
+#title {
+	font-weight:bold;
+	font-size:calc( var(--title-height) / var(--line-spacing) );
+	line-height:var(--title-height);
+	height:var(--title-height);
+}
+
+#artist {
+	font-size:calc( var(--artist-height) / var(--line-spacing) );
+	line-height:var(--artist-height);
+	height:var(--artist-height);
+}
+
+#album {
+	font-size:calc( var(--album-height) / var(--line-spacing) );
+	line-height:var(--album-height);
+	height:var(--album-height);
+}
+
+#artist,#album {
+	color:#d0d0d0;
+}
+
+#artist,#album,#title {
+	margin:0 auto;
+	vertical-align:middle;
+	width:calc(100% - 2 * var(--spacing) );
+}
+
+#progress {
+	height:calc(var(--progress-height));
+	width:0%;
+	background-color:#d75813;
+	position:absolute;
+	bottom:var(--bottom-margin);
+	left:0;
+	transition:width 0s linear;
+}
+
+#overlay {
+	position:fixed;
+	top:0;
+	left:0;
+	right:0;
+	bottom:0;
+	width:100%;
+	height:100%;
+	background-color:rgba(0,0,0,0.7);
+	z-index:10;
+	transition:opacity 1s;
+	opacity:0;
+}
+
+#status {
+	display:inline-block;
+	z-index:10;
+	position:absolute;
+	top:50%;
+	left:50%;
+	width:20vmin;
+	height:20vmin;
+	margin-left:-10vmin;
+	margin-top:-10vmin;
+	border-radius:10vmin;
+	background-color:white;
+	background-position:center;
+	background-repeat:no-repeat;
+	background-size:50% 50%;
+	filter:invert(1);
+	opacity:0.7;
+}
+
+#volume {
+	display:inline-block;
+	z-index:10;
+	position:absolute;
+	top:50%;
+	left:50%;
+	width:20vmin;
+	height:20vmin;
+	margin-left:-10vmin;
+	margin-top:-10vmin;
+	border-radius:10vmin;
+	line-height:20vmin;
+	vertical-align:middle;
+	text-align:center;
+	font-size:10vmin;
+	font-weight:bold;
+	color:rgba(255,255,255,0.7);
+	background:rgba(0,0,0,0.7);
+	opacity:0;
+	transition:opacity 1s;
+}
+
+.status-stop {
+	background-image:url(/images/Stop.svg);
+}
+
+.status-power {
+	background-image:url(/images/Power.svg);
+}
+
+.status-pause {
+	background-image:url(/images/Pause.svg);
+}
+
+.no-copying {
+	user-select:none;
+	-moz-user-select:none;
+	-webkit-user-select:none;
+	-ms-user-select:none;
+}
